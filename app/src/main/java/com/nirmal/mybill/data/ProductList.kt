@@ -21,7 +21,7 @@ class ProductList {
         ),
         "4" to Product(
             name = "Coffee",
-            price = 5.0,
+            price = 3.0,
             tax = 0.0,
         ),
         "5" to Product(

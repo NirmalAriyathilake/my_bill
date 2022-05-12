@@ -1,7 +1,6 @@
 package com.nirmal.mybill
 
 import com.nirmal.mybill.domain.BillDetails
-import com.nirmal.mybill.domain.PurchasedItem
 
 class BillPrinter(private val billDetails: BillDetails) {
     private fun getPrintBlock(text: String, length: Int, rightAlign: Boolean = true): String {
@@ -62,21 +61,21 @@ class BillPrinter(private val billDetails: BillDetails) {
         printDivider()
     }
 
-    private fun printItem(purchasedItem: PurchasedItem, price: Double) {
+    private fun printItem(name: String, count: Double, price: Double, countStr: String = "") {
         println(
             getPrintBlock(
-                text = purchasedItem.product.name,
+                text = name,
                 length = 20,
                 rightAlign = false,
             ) +
                     " | " +
                     getPrintBlock(
-                        text = purchasedItem.count.toString(),
+                        text = countStr.ifEmpty { count.toString() },
                         length = 10
                     ) +
                     " | " +
                     getPrintBlock(
-                        text = getPrintAmount(price * purchasedItem.count),
+                        text = getPrintAmount(price * count),
                         length = 15,
                     )
         )
@@ -96,14 +95,16 @@ class BillPrinter(private val billDetails: BillDetails) {
                 )
             }"
         )
-        println(
-            "Other${
-                getPrintBlock(
-                    text = getPrintAmount(surCharges),
-                    length = 46
-                )
-            }"
-        )
+        if (surCharges > 0) {
+            println(
+                "Other${
+                    getPrintBlock(
+                        text = getPrintAmount(surCharges),
+                        length = 46
+                    )
+                }"
+            )
+        }
         println(
             "Discount${
                 getPrintBlock(
@@ -155,8 +156,8 @@ class BillPrinter(private val billDetails: BillDetails) {
         var i = 0
         var remaining = 0.0
 
-        if (billDetails.transactions[0].startsWith("+")) {
-            remaining = billDetails.transactions[0].toDouble()
+        if (billDetails.transactions[0].startsWith("$")) {
+            remaining = billDetails.transactions[0].substring(1).toDouble()
             i++
         }
 
@@ -175,7 +176,11 @@ class BillPrinter(private val billDetails: BillDetails) {
                         total += (item.product.price * item.count)
                         totalTax += (tax * item.count)
 
-                        printItem(purchasedItem = item, price = amount)
+                        printItem(
+                            name = item.product.name,
+                            count = item.count * 1.0,
+                            price = amount
+                        )
                     }
 
                     var discount = 0.0
@@ -184,10 +189,192 @@ class BillPrinter(private val billDetails: BillDetails) {
                         discount = billDetails.discount.substring(
                             0,
                             billDetails.discount.length - 1
-                        ).toDouble() * total
+                        ).toDouble() / 100.0 * total
                         total -= discount
                     } else if (billDetails.discount.startsWith("$")) {
-                        discount = billDetails.discount.substring(1).toDouble() * total
+                        discount = billDetails.discount.substring(1).toDouble()
+                        total -= discount
+                    }
+
+                    printDivider()
+
+                    when (billDetails.transactions[i + 1]) {
+                        "full" -> {
+                            printSummary(
+                                total,
+                                totalTax,
+                                discount,
+                            )
+
+                            printDivider()
+
+                            printTransaction(
+                                remaining = remaining,
+                                paid = total - remaining,
+                            )
+                        }
+                        "credit" -> {
+                            val surCharges = 1.25 / 100.0 * total
+                            total += surCharges
+
+                            printSummary(
+                                total,
+                                totalTax,
+                                discount,
+                                surCharges = surCharges
+                            )
+
+                            printDivider()
+
+                            printTransaction(
+                                remaining = remaining,
+                                paid = total - remaining,
+                            )
+                        }
+                        else -> {
+                            printSummary(
+                                total,
+                                totalTax,
+                                discount,
+                            )
+
+                            printDivider()
+
+                            val paid = billDetails.transactions[i + 1].toDouble()
+                            val returned = paid - total - remaining
+
+                            printTransaction(
+                                remaining = remaining,
+                                paid = paid,
+                                returned = returned,
+                            )
+                        }
+                    }
+
+                    printDivider()
+                }
+            }
+            "single" -> {
+                printHeader()
+
+                var total = 0.0
+                var totalTax = 0.0
+
+                for (item in billDetails.items[0]) {
+                    val amount = item.product.price / (1 + (item.product.tax / 100.0))
+                    val tax = item.product.price - amount
+
+                    total += (item.product.price * item.count)
+                    totalTax += (tax * item.count)
+
+                    printItem(name = item.product.name, count = item.count * 1.0, price = amount)
+                }
+
+                var discount = 0.0
+
+                if (billDetails.discount.endsWith("%")) {
+                    discount = billDetails.discount.substring(
+                        0,
+                        billDetails.discount.length - 1
+                    ).toDouble() / 100.0 * total
+                    total -= discount
+                } else if (billDetails.discount.startsWith("$")) {
+                    discount = billDetails.discount.substring(1).toDouble()
+                    total -= discount
+                }
+
+                printDivider()
+
+                when (billDetails.transactions[i + 1]) {
+                    "full" -> {
+                        printSummary(
+                            total,
+                            totalTax,
+                            discount,
+                        )
+
+                        printDivider()
+
+                        printTransaction(
+                            remaining = remaining,
+                            paid = total - remaining,
+                        )
+                    }
+                    "credit" -> {
+                        val surCharges = 1.25 / 100.0 * total
+                        total += surCharges
+
+                        printSummary(
+                            total,
+                            totalTax,
+                            discount,
+                            surCharges = surCharges
+                        )
+
+                        printDivider()
+
+                        printTransaction(
+                            remaining = remaining,
+                            paid = total - remaining,
+                        )
+                    }
+                    else -> {
+                        printSummary(
+                            total,
+                            totalTax,
+                            discount,
+                        )
+
+                        printDivider()
+
+                        val paid = billDetails.transactions[i + 1].toDouble()
+                        val returned = paid - total - remaining
+
+                        printTransaction(
+                            remaining = remaining,
+                            paid = paid,
+                            returned = returned,
+                        )
+                    }
+                }
+
+                printDivider()
+            }
+            "split" -> {
+                remaining /= billDetails.count
+
+                for (personIndex in 1..billDetails.count) {
+                    printHeader(person = personIndex.toString())
+
+                    var total = 0.0
+                    var totalTax = 0.0
+
+                    for (item in billDetails.items[0]) {
+                        val amount = item.product.price / (1 + (item.product.tax / 100.0))
+                        val tax = item.product.price - amount
+                        val count = item.count * 1.0 / billDetails.count
+
+                        total += (item.product.price * count)
+                        totalTax += (tax * count)
+
+                        printItem(
+                            name = item.product.name,
+                            count = count,
+                            price = amount,
+                            countStr = "${item.count}/${billDetails.count}"
+                        )
+                    }
+
+                    var discount = 0.0
+
+                    if (billDetails.discount.endsWith("%")) {
+                        discount = billDetails.discount.substring(
+                            0,
+                            billDetails.discount.length - 1
+                        ).toDouble() / 100.0 * total
+                        total -= discount
+                    } else if (billDetails.discount.startsWith("$")) {
+                        discount = billDetails.discount.substring(1).toDouble()
                         total -= discount
                     }
 
